@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import plugin from "bun-plugin-tailwind";
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import path from "node:path";
@@ -12,6 +13,7 @@ if (existsSync(outdir)) {
 const result = await Bun.build({
   entrypoints: [path.resolve("src/index.html")],
   outdir,
+  plugins: [plugin],
   target: "browser",
   minify: true,
   sourcemap: "linked",

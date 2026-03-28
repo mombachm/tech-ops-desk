@@ -1,4 +1,4 @@
-import type { InputContract } from "./contracts";
+import type { InputContract } from "./inputContract";
 
 export const mockContract: InputContract = {
   contractVersion: "1.0",

@@ -1,0 +1,207 @@
+Quero que você me devolva APENAS um JSON válido no contrato abaixo, sem markdown, sem comentários e sem texto extra.
+
+Objetivo:
+Gerar o contrato de entrada de um app de revisão operacional chamado Tech Ops Desk. Esse JSON será consumido por uma UI que lista tickets, exibe ações pendentes de aprovação e, quando aplicável, executa requests HTTP estruturadas.
+
+Regras gerais do contrato:
+1. A raiz do JSON deve conter:
+   - contractVersion: string
+   - generatedAt: string em formato ISO-8601
+   - tickets: array
+
+2. Cada item de tickets deve conter:
+   - ticketId: string
+   - title: string
+   - proposedResponse: string opcional
+   - noActionReason: string opcional
+   - actions: array opcional
+
+3. Um ticket pode estar em 2 modos:
+   - Com ações:
+     - actions deve existir com uma ou mais ações
+   - Sem ação possível:
+     - actions pode estar vazio ou ausente
+     - noActionReason deve explicar claramente por que nenhuma ação é possível
+
+4. Tipos de ação permitidos:
+   - http_request
+   - slack_query
+   - manual_note
+
+5. Para action.type = "http_request", o formato é:
+   - actionId: string
+   - type: "http_request"
+   - label: string
+   - description: string opcional
+   - request:
+     - method: string
+     - url: string
+     - headers: objeto opcional com pares string:string
+     - query: objeto opcional com params arbitrários
+     - body: qualquer JSON válido, com estrutura arbitrária
+
+6. Muito importante:
+   - NÃO envie curl como string
+   - A request precisa vir estruturada
+   - query e body podem ter qualquer shape, conforme o caso real
+   - O app precisa conseguir revisar visualmente method, url, headers, query e body
+
+7. Para action.type = "slack_query", o formato é:
+   - actionId: string
+   - type: "slack_query"
+   - label: string
+   - description: string opcional
+   - queryText: string
+
+8. Para action.type = "manual_note", o formato é:
+   - actionId: string
+   - type: "manual_note"
+   - label: string
+   - description: string opcional
+   - note: string
+
+9. O contrato deve ser coerente com contexto de operação/suporte:
+   - dados sensíveis e operacionais devem aparecer claramente em query/body quando necessário
+   - ticketId, userId, cpf, cnpj, email, phone, accountId etc. podem aparecer se fizer sentido
+   - os dados precisam bater com o contexto do ticket
+
+10. Não invente campos fora do contrato.
+
+Estrutura esperada:
+
+{
+  "contractVersion": "1.0",
+  "generatedAt": "2026-03-28T12:00:00Z",
+  "tickets": [
+    {
+      "ticketId": "string",
+      "title": "string",
+      "proposedResponse": "string opcional",
+      "actions": [
+        {
+          "actionId": "string",
+          "type": "http_request",
+          "label": "string",
+          "description": "string opcional",
+          "request": {
+            "method": "POST",
+            "url": "https://...",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "query": {
+              "qualquerCampo": "qualquerValor"
+            },
+            "body": {
+              "qualquer": "estrutura",
+              "aninhada": true
+            }
+          }
+        },
+        {
+          "actionId": "string",
+          "type": "slack_query",
+          "label": "string",
+          "description": "string opcional",
+          "queryText": "string"
+        },
+        {
+          "actionId": "string",
+          "type": "manual_note",
+          "label": "string",
+          "description": "string opcional",
+          "note": "string"
+        }
+      ]
+    },
+    {
+      "ticketId": "string",
+      "title": "string",
+      "proposedResponse": "string opcional",
+      "noActionReason": "explicação obrigatória quando não houver ação possível",
+      "actions": []
+    }
+  ]
+}
+
+Exemplo válido:
+
+{
+  "contractVersion": "1.0",
+  "generatedAt": "2026-03-28T12:00:00Z",
+  "tickets": [
+    {
+      "ticketId": "43732890547",
+      "title": "Habilitar token e link de primeiro acesso via WhatsApp",
+      "proposedResponse": "Habilitamos o envio via WhatsApp e reenviamos o fluxo de primeiro acesso.",
+      "actions": [
+        {
+          "actionId": "a1",
+          "type": "http_request",
+          "label": "Habilitar WhatsApp para primeiro acesso",
+          "description": "Ativa o canal WhatsApp no fluxo de onboarding para o CNPJ informado.",
+          "request": {
+            "method": "POST",
+            "url": "https://internal-api/actions/enable-whatsapp",
+            "headers": {
+              "Content-Type": "application/json",
+              "X-Source": "tech-ops-desk"
+            },
+            "query": {
+              "tenant": "mobile-techops"
+            },
+            "body": {
+              "cnpj": "42548856000146",
+              "flow": "first_access",
+              "ticketId": "43732890547"
+            }
+          }
+        },
+        {
+          "actionId": "a2",
+          "type": "http_request",
+          "label": "Reenviar convite",
+          "request": {
+            "method": "POST",
+            "url": "https://internal-api/actions/resend-invite",
+            "headers": {
+              "Content-Type": "application/json"
+            },
+            "body": {
+              "ticketId": "43732890547",
+              "channels": ["whatsapp", "email"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "ticketId": "42932822406",
+      "title": "Código não chega",
+      "proposedResponse": "Validamos o contato, corrigimos o método de verificação e reenviamos o código.",
+      "actions": [
+        {
+          "actionId": "b1",
+          "type": "slack_query",
+          "label": "Consultar vínculo antigo de telefone",
+          "queryText": "SELECT * FROM users WHERE phone = '11975190775';"
+        },
+        {
+          "actionId": "b2",
+          "type": "manual_note",
+          "label": "Anotar evidência de conferência",
+          "note": "Confirmar se o telefone antigo ainda está preso ao usuário antes de orientar o cliente."
+        }
+      ]
+    },
+    {
+      "ticketId": "43800011223",
+      "title": "Cliente sem ação possível no momento",
+      "proposedResponse": "Identificamos que o caso depende de retorno do cliente com documentação adicional.",
+      "noActionReason": "Nenhuma ação operacional é possível agora porque falta o documento de validação enviado pelo cliente.",
+      "actions": []
+    }
+  ]
+}
+
+Agora gere o JSON final exatamente nesse contrato.

@@ -4,23 +4,23 @@ import {
   buildDerivedCurl,
   buildRequestUrl,
   prettyJson,
-  ticketHasNoActions,
-  type ActionOutput,
   type ActionRuntimeState,
-  type ApprovalStatus,
   type ExecutionPayload,
   type ExecutionResult,
-  type ExecutionStatus,
-  type HttpAction,
   type HttpRequestDefinition,
+  type TicketOutputStatus,
+} from "./contracts";
+import {
   type InputContract,
   type InputTicket,
+  type InputAction as TicketAction,
+  validateInputContract,
+} from "./inputContract";
+import {
+  type ActionOutput,
   type OutputContract,
   type OutputTicket,
-  type TicketAction,
-  type TicketOutputStatus,
-  validateInputContract,
-} from "./contracts";
+} from "./outputContract";
 import { mockContract } from "./mockData";
 
 type FilterKey =
@@ -38,6 +38,24 @@ interface AppState {
 }
 
 const initialState = createAppState(mockContract);
+
+const toneClasses = {
+  neutral: "text-ink",
+  warning: "text-brand",
+  success: "text-success",
+  info: "text-info",
+  danger: "text-danger",
+  muted: "text-ink-soft",
+} as const;
+
+const filterOptions: Array<{ value: FilterKey; label: string }> = [
+  { value: "all", label: "Todos" },
+  { value: "pending", label: "Pendentes" },
+  { value: "ready", label: "Prontos" },
+  { value: "manual", label: "Manuais" },
+  { value: "failed", label: "Falhas" },
+  { value: "no_action", label: "Sem ação" },
+];
 
 export function App() {
   const [state, setState] = useState<AppState>(initialState);
@@ -257,43 +275,85 @@ export function App() {
   };
 
   return (
-    <div className="shell">
-      <div className="ambient ambient-left" />
-      <div className="ambient ambient-right" />
-      <header className="hero">
-        <div className="hero-copy">
-          <p className="eyebrow">Tech Ops Desk</p>
-          <h1>Tech OPS Desk</h1>
-          <p className="hero-text">
+    <div className="relative overflow-hidden px-4 py-4 md:px-6 xl:px-8 xl:py-8">
+      <div className="pointer-events-none fixed -left-20 -top-24 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,_rgba(228,108,162,0.55),_transparent_62%)] blur-3xl" />
+      <div className="pointer-events-none fixed -right-24 top-28 h-[28rem] w-[28rem] rounded-full bg-[radial-gradient(circle,_rgba(255,196,213,0.28),_transparent_62%)] blur-3xl" />
+
+      <header className="relative z-10 mb-6 grid items-end gap-6 xl:grid-cols-[1.25fr_1fr]">
+        <div>
+          <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+            Tech Ops Desk
+          </p>
+          <h1 className="mb-3 text-5xl font-black leading-none text-white md:text-6xl">
+            Tech OPS Desk
+          </h1>
+          <p className="m-0 max-w-3xl leading-7 text-ink-soft">
             Revise exatamente o que será executado, simule em{" "}
-            <code>dryRun</code> quando precisar e gere um JSON final pronto para
-            o próximo agente.
+            <code className="rounded-md bg-white/6 px-1.5 py-0.5 text-brand-pale">
+              dryRun
+            </code>{" "}
+            quando precisar e gere um JSON final pronto para o próximo agente.
           </p>
         </div>
-        <div className="hero-actions">
-          <label className={`dryrun-toggle ${state.dryRun ? "active" : ""}`}>
+
+        <div className="grid gap-4 justify-items-stretch xl:justify-items-end">
+          <label
+            className={cx(
+              "grid w-full max-w-[32rem] grid-cols-[auto_auto_1fr] items-center gap-3 rounded-[1.35rem] border px-5 py-4 shadow-[0_24px_60px_rgba(251,43,140,0.12)]",
+              state.dryRun
+                ? "border-brand-soft/25 bg-[linear-gradient(135deg,rgba(217,31,121,0.92),rgba(150,16,81,0.9))]"
+                : "border-danger/35 bg-[linear-gradient(180deg,rgba(82,16,28,0.92),rgba(52,12,20,0.94))]",
+            )}
+          >
             <input
               type="checkbox"
+              className="hidden"
               checked={state.dryRun}
               onChange={handleToggleDryRun}
             />
-            <span className="toggle-track">
-              <span className="toggle-thumb" />
+            <span
+              className={cx(
+                "relative h-8 w-14 rounded-full border",
+                state.dryRun
+                  ? "border-white/18 bg-[linear-gradient(135deg,rgba(255,255,255,0.18),rgba(255,255,255,0.08))]"
+                  : "border-white/12 bg-white/8",
+              )}
+            >
+              <span
+                className={cx(
+                  "absolute left-[0.18rem] top-[0.18rem] h-[1.45rem] w-[1.45rem] rounded-full bg-[#ffe7f2] shadow-[0_6px_18px_rgba(0,0,0,0.25)] transition-transform duration-200",
+                  state.dryRun && "translate-x-[1.45rem] bg-white",
+                )}
+              />
             </span>
             <span>
-              <strong>dryRun</strong>
-              <small>
+              <strong
+                className={cx(
+                  "font-sans",
+                  state.dryRun ? "text-white" : "text-danger",
+                )}
+              >
+                dryRun
+              </strong>
+              <small
+                className={cx(
+                  "mt-1 block text-sm leading-5",
+                  state.dryRun ? "text-[#ffe0ec]" : "text-danger",
+                )}
+              >
                 {state.dryRun
                   ? "Sucesso simulado. Nenhuma request real sai do app."
                   : "Aprovações em modo real vão afetar produção e disparar requests reais."}
               </small>
             </span>
           </label>
-          <div className="input-actions">
-            <label className="file-button">
+
+          <div className="flex flex-wrap justify-stretch gap-3 xl:justify-end">
+            <label className="w-full cursor-pointer rounded-full border border-line bg-surface/90 px-4 py-3 text-center text-sm font-semibold text-ink transition duration-150 hover:-translate-y-0.5 sm:w-auto">
               Carregar JSON
               <input
                 type="file"
+                className="hidden"
                 accept="application/json"
                 onChange={(event) => {
                   const file = event.currentTarget.files?.[0] ?? null;
@@ -303,14 +363,14 @@ export function App() {
               />
             </label>
             <button
-              className="secondary-button"
+              className="w-full rounded-full border border-line bg-surface/90 px-4 py-3 text-sm font-semibold text-ink transition duration-150 hover:-translate-y-0.5 sm:w-auto"
               type="button"
               onClick={handleLoadMock}
             >
               Recarregar mock
             </button>
             <button
-              className="primary-button"
+              className="w-full rounded-full border border-brand bg-brand px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(217,31,121,0.26)] transition duration-150 hover:-translate-y-0.5 sm:w-auto"
               type="button"
               onClick={handleDownloadOutput}
             >
@@ -321,17 +381,19 @@ export function App() {
       </header>
 
       {state.dryRun ? (
-        <section className="dryrun-banner">
+        <section className="relative z-10 mb-5 rounded-2xl border border-brand/20 bg-brand/12 px-4 py-4 text-ink shadow-[0_18px_40px_rgba(0,0,0,0.08)] backdrop-blur">
           <strong>Simulação ativa.</strong> Todas as aprovações serão tratadas
           como sucesso para gerar um JSON de saída de teste.
         </section>
       ) : null}
 
       {errorMessage ? (
-        <section className="error-banner">{errorMessage}</section>
+        <section className="relative z-10 mb-5 rounded-2xl border border-danger/25 bg-danger-soft px-4 py-4 text-[#ffb8c0] shadow-[0_18px_40px_rgba(0,0,0,0.08)] backdrop-blur">
+          {errorMessage}
+        </section>
       ) : null}
 
-      <section className="summary-grid">
+      <section className="relative z-10 mb-5 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <SummaryCard
           label="Tickets"
           value={String(totals.total)}
@@ -364,106 +426,146 @@ export function App() {
         />
       </section>
 
-      <section className="filter-row panel">
-        <div className="panel-head compact">
+      <section className="relative z-10 mb-5 rounded-[1.6rem] border border-line bg-surface/92 p-4 shadow-[0_18px_42px_rgba(0,0,0,0.18)] backdrop-blur">
+        <div className="mb-3 flex items-start justify-between gap-4">
           <div>
-            <p className="panel-kicker">Recorte da fila</p>
-            <h2>Filtros</h2>
+            <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+              Recorte da fila
+            </p>
+            <h2 className="mt-1 font-sans text-xl font-bold text-white">
+              Filtros
+            </h2>
           </div>
         </div>
-        <div className="filter-group row">
-          {[
-            ["all", "Todos"],
-            ["pending", "Pendentes"],
-            ["ready", "Prontos"],
-            ["manual", "Manuais"],
-            ["failed", "Falhas"],
-            ["no_action", "Sem ação"],
-          ].map(([value, label]) => (
+        <div className="flex flex-wrap justify-start gap-2">
+          {filterOptions.map((option) => (
             <button
-              key={value}
+              key={option.value}
               type="button"
-              className={`filter-pill ${filter === value ? "active" : ""}`}
-              onClick={() => setFilter(value as FilterKey)}
+              className={cx(
+                "rounded-full border px-4 py-3 text-sm font-semibold transition duration-150 hover:-translate-y-0.5",
+                filter === option.value
+                  ? "border-brand bg-brand text-white"
+                  : "border-line bg-surface/90 text-ink",
+              )}
+              onClick={() => setFilter(option.value)}
             >
-              {label}
+              {option.label}
             </button>
           ))}
         </div>
       </section>
 
-      <section className="workspace">
-        <aside className="rail">
-          <div className="panel-head">
+      <section className="relative z-10 grid gap-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+        <aside className="min-w-0 rounded-[1.8rem] border border-line bg-surface/92 p-4 shadow-[0_24px_48px_rgba(0,0,0,0.2)] backdrop-blur">
+          <div className="mb-4 flex items-start justify-between gap-4">
             <div>
-              <p className="panel-kicker">Fila operacional</p>
-              <h2>Aprovações</h2>
+              <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                Fila operacional
+              </p>
+              <h2 className="mt-1 font-sans text-xl font-bold text-white">
+                Aprovações
+              </h2>
             </div>
-            <p className="rail-summary">
+            <p className="m-0 pt-1 text-sm text-ink-soft">
               {visibleTickets.length} tickets exibidos
             </p>
           </div>
 
-          <div className="ticket-list">
-            {visibleTickets.map((item) => (
-              <button
-                key={item.ticket.ticketId}
-                type="button"
-                className={`ticket-card ${selectedTicket?.ticket.ticketId === item.ticket.ticketId ? "selected" : ""}`}
-                onClick={() => handleSelectTicket(item.ticket.ticketId)}
-              >
-                <div className="ticket-card-head">
-                  <span className="ticket-id">#{item.ticket.ticketId}</span>
-                  <StatusBadge status={item.status} />
-                </div>
-                <h3>{item.ticket.title}</h3>
-                <p>
-                  {item.ticket.proposedResponse ??
-                    item.ticket.noActionReason ??
-                    "Sem resposta proposta."}
-                </p>
-                <div className="ticket-meta">
-                  <span>{item.ticket.actions?.length ?? 0} ações</span>
-                  <span>{pendingCount(item.runtime)} pendentes</span>
-                </div>
-              </button>
-            ))}
+          <div className="grid gap-4">
+            {visibleTickets.map((item) => {
+              const isSelected =
+                selectedTicket?.ticket.ticketId === item.ticket.ticketId;
+              return (
+                <button
+                  key={item.ticket.ticketId}
+                  type="button"
+                  className={cx(
+                    "w-full rounded-[1.55rem] border p-4 text-left shadow-[0_24px_52px_rgba(0,0,0,0.2)] backdrop-blur transition hover:-translate-y-0.5",
+                    isSelected
+                      ? "border-brand bg-[linear-gradient(180deg,rgba(217,31,121,0.92),rgba(145,16,78,0.94))] shadow-[0_26px_54px_rgba(217,31,121,0.22)]"
+                      : "border-line bg-surface/95 hover:border-brand/20 hover:bg-brand/8",
+                  )}
+                  onClick={() => handleSelectTicket(item.ticket.ticketId)}
+                >
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <span
+                      className={cx(
+                        "text-sm font-semibold",
+                        isSelected ? "text-[#ffe0ec]" : "text-brand",
+                      )}
+                    >
+                      #{item.ticket.ticketId}
+                    </span>
+                    <StatusBadge status={item.status} selected={isSelected} />
+                  </div>
+                  <h3
+                    className={cx(
+                      "my-3 font-sans text-base font-bold",
+                      isSelected ? "text-[#fff7fa]" : "text-ink",
+                    )}
+                  >
+                    {item.ticket.title}
+                  </h3>
+                  <p
+                    className={cx(
+                      "m-0 leading-6",
+                      isSelected ? "text-[#fff7fa]" : "text-ink-soft",
+                    )}
+                  >
+                    {item.ticket.proposedResponse ??
+                      item.ticket.noActionReason ??
+                      "Sem resposta proposta."}
+                  </p>
+                  <div
+                    className={cx(
+                      "mt-3 flex flex-wrap items-center gap-2.5 text-sm",
+                      isSelected ? "text-[#ffe0ec]" : "text-ink-soft",
+                    )}
+                  >
+                    <span>{item.ticket.actions?.length ?? 0} ações</span>
+                    <span>{pendingCount(item.runtime)} pendentes</span>
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </aside>
 
-        <main className="detail-column focus-column">
-          <div className="focus-banner">
-            <div>
-              <p className="panel-kicker">Contexto ativo</p>
-              <h2>Ticket em revisão</h2>
-            </div>
-            {selectedTicket ? (
-              <span className="focus-ticket-id">
-                #{selectedTicket.ticket.ticketId}
-              </span>
-            ) : null}
-          </div>
+        <main className="relative min-w-0 rounded-[2rem] border border-brand-soft/18 bg-[linear-gradient(180deg,rgba(217,31,121,0.14),rgba(28,13,26,0.98))] p-5 shadow-[0_28px_60px_rgba(217,31,121,0.14)]">
+          <div className="pointer-events-none absolute inset-0 rounded-[inherit] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.05)]" />
           {selectedTicket ? (
-            <>
-              <section className="detail-hero panel">
-                <div className="detail-hero-copy">
-                  <p className="panel-kicker">Ticket selecionado</p>
-                  <h2>{selectedTicket.ticket.title}</h2>
-                  <div className="detail-tags">
-                    <span className="ticket-id">
-                      #{selectedTicket.ticket.ticketId}
-                    </span>
+            <div className="relative z-10 grid gap-4">
+              <section className="grid gap-4 rounded-[1.55rem] border border-line bg-[linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-5 shadow-[0_24px_52px_rgba(0,0,0,0.2)] xl:grid-cols-[1fr_minmax(240px,0.65fr)]">
+                <div>
+                  <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                    Ticket selecionado
+                  </p>
+                  <h2 className="mb-3 mt-1 text-3xl font-black text-white">
+                    {selectedTicket.ticket.title}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {selectedTicket ? (
+                      <span className="inline-flex items-center justify-center rounded-full border border-brand/20 bg-black/20 px-4 py-2 text-sm font-semibold tracking-[0.08em] text-brand-pale">
+                        #{selectedTicket.ticket.ticketId}
+                      </span>
+                    ) : null}
                     <StatusBadge status={selectedTicket.status} />
                     <span
-                      className={`mode-badge ${state.dryRun ? "dry" : "live"}`}
+                      className={cx(
+                        "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.08em] text-white",
+                        state.dryRun ? "bg-brand" : "bg-brand-dark",
+                      )}
                     >
                       {state.dryRun ? "dryRun" : "live"}
                     </span>
                   </div>
                 </div>
-                <div className="proposal-panel">
-                  <p className="muted-label">Resposta proposta</p>
-                  <p>
+                <div className="rounded-[1.2rem] border border-brand/12 bg-brand/8 p-4">
+                  <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                    Resposta proposta
+                  </p>
+                  <p className="m-0 leading-6 text-ink-soft">
                     {selectedTicket.ticket.proposedResponse ??
                       "Sem resposta proposta."}
                   </p>
@@ -471,41 +573,73 @@ export function App() {
               </section>
 
               {ticketHasNoActions(selectedTicket.ticket) ? (
-                <section className="panel empty-state">
-                  <p className="panel-kicker">Sem ação executável</p>
-                  <h3>
+                <section className="rounded-[1.55rem] border border-line bg-surface/95 p-5 text-center shadow-[0_24px_52px_rgba(0,0,0,0.2)]">
+                  <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                    Sem ação executável
+                  </p>
+                  <h3 className="mt-1 font-sans text-xl font-bold text-white">
                     Nenhuma automação ou revisão operacional possível para este
                     ticket
                   </h3>
-                  <p>
+                  <p className="mt-2 text-ink-soft">
                     {selectedTicket.ticket.noActionReason ??
                       "O contrato não trouxe ações para este ticket."}
                   </p>
                 </section>
               ) : (
                 <>
-                  <section className="panel">
-                    <div className="panel-head">
+                  <section className="rounded-[1.55rem] border border-line bg-surface/95 p-5 shadow-[0_24px_52px_rgba(0,0,0,0.2)]">
+                    <div className="mb-4 flex items-start justify-between gap-4">
                       <div>
-                        <p className="panel-kicker">Ações do ticket</p>
-                        <h3>Itens revisáveis</h3>
+                        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                          Ações do ticket
+                        </p>
+                        <h3 className="mt-1 font-sans text-xl font-bold text-white">
+                          Itens revisáveis
+                        </h3>
                       </div>
                     </div>
-                    <div className="action-strip">
+                    <div className="flex gap-3 overflow-x-auto pb-1">
                       {selectedTicket.ticket.actions?.map((action) => {
                         const runtime = selectedTicket.runtime[action.actionId];
+                        const isSelected =
+                          selectedAction?.actionId === action.actionId;
                         return (
                           <button
                             key={action.actionId}
                             type="button"
-                            className={`action-chip ${selectedAction?.actionId === action.actionId ? "selected" : ""}`}
+                            className={cx(
+                              "min-w-[220px] rounded-[1.55rem] border p-4 text-left shadow-[0_24px_52px_rgba(0,0,0,0.2)] transition hover:-translate-y-0.5",
+                              isSelected
+                                ? "border-brand bg-[linear-gradient(180deg,rgba(217,31,121,0.92),rgba(145,16,78,0.94))] shadow-[0_26px_54px_rgba(217,31,121,0.22)]"
+                                : "border-line bg-surface/95",
+                            )}
                             onClick={() => setSelectedActionId(action.actionId)}
                           >
-                            <span className={`action-type ${action.type}`}>
+                            <span
+                              className={cx(
+                                "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.08em]",
+                                getActionTypeClass(action.type, isSelected),
+                              )}
+                            >
                               {action.type}
                             </span>
-                            <strong>{action.label}</strong>
-                            <small>{renderActionRuntime(runtime)}</small>
+                            <strong
+                              className={cx(
+                                "my-2 block",
+                                isSelected ? "text-[#fff7fa]" : "text-ink",
+                              )}
+                            >
+                              {action.label}
+                            </strong>
+                            <small
+                              className={cx(
+                                "block text-sm",
+                                isSelected ? "text-[#fff7fa]" : "text-ink-soft",
+                              )}
+                            >
+                              {renderActionRuntime(runtime)}
+                            </small>
                           </button>
                         );
                       })}
@@ -513,16 +647,20 @@ export function App() {
                   </section>
 
                   {selectedAction ? (
-                    <section className="panel">
-                      <div className="panel-head">
+                    <section className="rounded-[1.55rem] border border-line bg-surface/95 p-5 shadow-[0_24px_52px_rgba(0,0,0,0.2)]">
+                      <div className="mb-4 flex items-start justify-between gap-4">
                         <div>
-                          <p className="panel-kicker">Revisão detalhada</p>
-                          <h3>{selectedAction.label}</h3>
+                          <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+                            Revisão detalhada
+                          </p>
+                          <h3 className="mt-1 font-sans text-xl font-bold text-white">
+                            {selectedAction.label}
+                          </h3>
                         </div>
-                        <div className="review-actions">
+                        <div className="flex gap-3">
                           <button
                             type="button"
-                            className="secondary-button"
+                            className="rounded-full border border-line bg-surface/90 px-4 py-3 text-sm font-semibold text-ink transition duration-150 hover:-translate-y-0.5"
                             onClick={() =>
                               handleReject(
                                 selectedTicket.ticket.ticketId,
@@ -534,7 +672,7 @@ export function App() {
                           </button>
                           <button
                             type="button"
-                            className="primary-button"
+                            className="rounded-full border border-brand bg-brand px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_40px_rgba(217,31,121,0.26)] transition duration-150 hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
                             onClick={() =>
                               handleApprove(
                                 selectedTicket.ticket,
@@ -550,7 +688,7 @@ export function App() {
                         </div>
                       </div>
 
-                      <p className="description">
+                      <p className="m-0 leading-6 text-ink-soft">
                         {selectedAction.description ??
                           "Sem descrição complementar."}
                       </p>
@@ -573,35 +711,43 @@ export function App() {
                   ) : null}
                 </>
               )}
-            </>
+            </div>
           ) : (
-            <section className="panel empty-state">
-              <h2>Nenhum ticket disponível</h2>
-              <p>
+            <section className="relative z-10 rounded-[1.55rem] border border-line bg-surface/95 p-5 text-center shadow-[0_24px_52px_rgba(0,0,0,0.2)]">
+              <h2 className="text-xl font-bold text-white">
+                Nenhum ticket disponível
+              </h2>
+              <p className="mt-2 text-ink-soft">
                 Carregue um contrato JSON ou recarregue o mock para começar a
                 revisão.
               </p>
             </section>
           )}
         </main>
+      </section>
 
-        <aside className="output-column">
-          <section className="panel output-panel">
-            <div className="panel-head">
-              <div>
-                <p className="panel-kicker">Output gerado</p>
-                <h2>JSON de saída</h2>
-              </div>
+      <section className="relative z-10 mt-5">
+        <section className="rounded-[1.55rem] border border-white/10 bg-[linear-gradient(180deg,rgba(51,51,51,0.98),rgba(43,43,43,0.98))] p-5 shadow-[0_24px_52px_rgba(0,0,0,0.24)]">
+          <div className="mb-4 flex items-start justify-between gap-4">
+            <div>
+              <p className="text-[0.73rem] uppercase tracking-[0.14em] text-white/70">
+                Output gerado
+              </p>
+              <h2 className="mt-1 font-sans text-xl font-bold text-white">
+                JSON de saída
+              </h2>
             </div>
-            <div className="output-meta">
-              <span>
-                {outputContract.mode === "dry_run" ? "Simulado" : "Real"}
-              </span>
-              <span>{outputContract.tickets.length} tickets</span>
-            </div>
-            <pre>{JSON.stringify(outputContract, null, 2)}</pre>
-          </section>
-        </aside>
+          </div>
+          <div className="mb-3 flex flex-wrap items-center gap-2.5 text-white">
+            <span>
+              {outputContract.mode === "dry_run" ? "Simulado" : "Real"}
+            </span>
+            <span>{outputContract.tickets.length} tickets</span>
+          </div>
+          <pre className="max-h-[32rem] overflow-auto rounded-[1.2rem] border border-white/10 bg-black/25 p-4 text-sm leading-6 text-white">
+            {JSON.stringify(outputContract, null, 2)}
+          </pre>
+        </section>
       </section>
     </div>
   );
@@ -614,19 +760,34 @@ function SummaryCard({
 }: {
   label: string;
   value: string;
-  tone: "neutral" | "warning" | "success" | "info" | "danger" | "muted";
+  tone: keyof typeof toneClasses;
 }) {
   return (
-    <article className={`summary-card ${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
+    <article className="rounded-[1.4rem] border border-line bg-surface/92 p-5 shadow-[0_22px_44px_rgba(0,0,0,0.18)] backdrop-blur">
+      <span className="mb-2 block text-sm text-ink-soft">{label}</span>
+      <strong
+        className={cx("font-sans text-3xl font-black", toneClasses[tone])}
+      >
+        {value}
+      </strong>
     </article>
   );
 }
 
-function StatusBadge({ status }: { status: TicketOutputStatus }) {
+function StatusBadge({
+  status,
+  selected = false,
+}: {
+  status: TicketOutputStatus;
+  selected?: boolean;
+}) {
   return (
-    <span className={`status-badge ${status}`}>
+    <span
+      className={cx(
+        "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.08em]",
+        getStatusBadgeClass(status),
+      )}
+    >
       {status.replaceAll("_", " ")}
     </span>
   );
@@ -638,18 +799,30 @@ function ActionStatusPanel({
   runtime: ActionRuntimeState | undefined;
 }) {
   return (
-    <div className="status-panel">
+    <div className="mt-4 grid gap-3 rounded-[1.25rem] border border-line bg-white/4 p-4 xl:grid-cols-3">
       <div>
-        <p className="muted-label">Approval</p>
-        <strong>{runtime?.approvalStatus ?? "pending"}</strong>
+        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+          Approval
+        </p>
+        <strong className="text-ink">
+          {runtime?.approvalStatus ?? "pending"}
+        </strong>
       </div>
       <div>
-        <p className="muted-label">Execution</p>
-        <strong>{runtime?.executionStatus ?? "not_started"}</strong>
+        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+          Execution
+        </p>
+        <strong className="text-ink">
+          {runtime?.executionStatus ?? "not_started"}
+        </strong>
       </div>
-      <div className="status-detail">
-        <p className="muted-label">Detalhe</p>
-        <p>{runtime?.detail ?? "Aguardando decisão."}</p>
+      <div>
+        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+          Detalhe
+        </p>
+        <p className="m-0 leading-6 text-ink-soft">
+          {runtime?.detail ?? "Aguardando decisão."}
+        </p>
       </div>
     </div>
   );
@@ -665,11 +838,13 @@ function HttpErrorCard({
   }
 
   return (
-    <section className="http-error-card">
-      <div className="http-error-head">
+    <section className="mt-4 rounded-[1.2rem] border border-danger/20 bg-danger-soft p-4">
+      <div className="mb-2 flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
         <div>
-          <p className="muted-label">Erro HTTP retornado</p>
-          <h4>
+          <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+            Erro HTTP retornado
+          </p>
+          <h4 className="mt-1 text-base font-bold text-danger">
             {runtime.httpError.status
               ? `${runtime.httpError.status}`
               : "Erro de execução"}
@@ -679,10 +854,12 @@ function HttpErrorCard({
           </h4>
         </div>
         {runtime.httpError.finalUrl ? (
-          <code>{truncateText(runtime.httpError.finalUrl, 72)}</code>
+          <code className="max-w-[18rem] text-sm text-danger">
+            {truncateText(runtime.httpError.finalUrl, 72)}
+          </code>
         ) : null}
       </div>
-      <p>
+      <p className="m-0 leading-6 text-danger">
         {truncateText(
           runtime.httpError.preview ?? "Sem corpo de erro retornado.",
           220,
@@ -696,22 +873,28 @@ function ActionReview({ action }: { action: TicketAction }) {
   if (action.type === "http_request") {
     const requestUrl = buildRequestUrl(action.request);
     return (
-      <div className="review-grid">
-        <div className="review-card">
-          <p className="muted-label">Request final</p>
-          <div className="request-head">
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
+        <section className="rounded-[1.2rem] border border-line bg-black/12 p-4">
+          <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+            Request final
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2.5">
             <span
-              className={`method-pill ${action.request.method.toUpperCase()}`}
+              className={cx(
+                "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-[0.72rem] font-semibold uppercase tracking-[0.08em]",
+                getMethodClass(action.request.method),
+              )}
             >
               {action.request.method.toUpperCase()}
             </span>
-            <code>{requestUrl}</code>
+            <code className="text-ink">{requestUrl}</code>
           </div>
-        </div>
+        </section>
         <DataTable
           title="Query params"
           data={action.request.query ?? {}}
           emptyMessage="Sem query params."
+          emphasizeSensitive
         />
         <DataTable
           title="Headers"
@@ -722,6 +905,7 @@ function ActionReview({ action }: { action: TicketAction }) {
           title="Body"
           value={action.request.body}
           emptyMessage="Sem body."
+          emphasizeSensitive
         />
         <JsonPanel
           title="cURL derivado"
@@ -735,7 +919,7 @@ function ActionReview({ action }: { action: TicketAction }) {
 
   if (action.type === "slack_query") {
     return (
-      <div className="review-grid">
+      <div className="mt-4 grid gap-4 xl:grid-cols-2">
         <JsonPanel
           title="Query pronta para uso manual"
           value={action.queryText}
@@ -747,7 +931,7 @@ function ActionReview({ action }: { action: TicketAction }) {
   }
 
   return (
-    <div className="review-grid">
+    <div className="mt-4 grid gap-4 xl:grid-cols-2">
       <JsonPanel
         title="Instrução manual"
         value={action.note}
@@ -761,28 +945,62 @@ function DataTable({
   title,
   data,
   emptyMessage,
+  emphasizeSensitive = false,
 }: {
   title: string;
   data: Record<string, unknown>;
   emptyMessage: string;
+  emphasizeSensitive?: boolean;
 }) {
   const entries = Object.entries(data);
 
   return (
-    <section className="review-card">
-      <p className="muted-label">{title}</p>
+    <section className="rounded-[1.2rem] border border-line bg-black/12 p-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+          {title}
+        </p>
+        {emphasizeSensitive && entries.length > 0 ? (
+          <span className="rounded-full border border-brand/30 bg-brand/14 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-brand-pale">
+            conferir com ticket
+          </span>
+        ) : null}
+      </div>
       {entries.length === 0 ? (
-        <p className="empty-copy">{emptyMessage}</p>
+        <p className="mt-2 text-ink-soft">{emptyMessage}</p>
       ) : (
-        <div className="key-value-list">
-          {entries.map(([key, value]) => (
-            <div key={key}>
-              <span>{key}</span>
-              <code>
-                {typeof value === "string" ? value : JSON.stringify(value)}
-              </code>
-            </div>
-          ))}
+        <div className="mt-2 grid gap-2.5">
+          {entries.map(([key, value]) => {
+            const sensitive = emphasizeSensitive && isSensitiveKey(key);
+            return (
+              <div
+                key={key}
+                className={cx(
+                  "grid gap-1.5 rounded-2xl border p-3",
+                  sensitive
+                    ? "border-brand/30 bg-brand/10 shadow-[0_0_0_1px_rgba(217,31,121,0.08)]"
+                    : "border-line bg-white/4",
+                )}
+              >
+                <span
+                  className={cx(
+                    "text-sm",
+                    sensitive ? "font-semibold text-brand-pale" : "text-ink-soft",
+                  )}
+                >
+                  {key}
+                </span>
+                <code
+                  className={cx(
+                    "break-words",
+                    sensitive ? "text-base font-semibold text-white" : "text-ink",
+                  )}
+                >
+                  {typeof value === "string" ? value : JSON.stringify(value)}
+                </code>
+              </div>
+            );
+          })}
         </div>
       )}
     </section>
@@ -794,23 +1012,147 @@ function JsonPanel({
   value,
   emptyMessage,
   isCode = false,
+  emphasizeSensitive = false,
 }: {
   title: string;
   value: unknown;
   emptyMessage: string;
   isCode?: boolean;
+  emphasizeSensitive?: boolean;
 }) {
   const content = prettyJson(value);
   return (
-    <section className="review-card">
-      <p className="muted-label">{title}</p>
+    <section className="rounded-[1.2rem] border border-line bg-black/12 p-4">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <p className="text-[0.73rem] uppercase tracking-[0.14em] text-ink-soft">
+          {title}
+        </p>
+        {emphasizeSensitive && content ? (
+          <span className="rounded-full border border-brand/30 bg-brand/14 px-3 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.08em] text-brand-pale">
+            revisar dados
+          </span>
+        ) : null}
+      </div>
       {content ? (
-        <pre className={isCode ? "code-block" : ""}>{content}</pre>
+        emphasizeSensitive ? (
+          <SensitiveJsonView value={value} />
+        ) : (
+          <pre
+            className={cx(
+              "m-0 break-words whitespace-pre-wrap leading-6 text-ink",
+              isCode && "font-mono",
+            )}
+          >
+            {content}
+          </pre>
+        )
       ) : (
-        <p className="empty-copy">{emptyMessage}</p>
+        <p className="mt-2 text-ink-soft">{emptyMessage}</p>
       )}
     </section>
   );
+}
+
+function SensitiveJsonView({ value }: { value: unknown }) {
+  if (value === null || value === undefined) {
+    return <p className="mt-2 text-ink-soft">Sem conteúdo.</p>;
+  }
+
+  if (Array.isArray(value)) {
+    return (
+      <div className="grid gap-2">
+        {value.map((item, index) => (
+          <div key={index} className="rounded-xl border border-line bg-white/4 p-3">
+            <p className="mb-2 text-xs uppercase tracking-[0.08em] text-ink-soft">
+              item {index + 1}
+            </p>
+            <SensitiveJsonView value={item} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    return (
+      <div className="grid gap-2">
+        {Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
+          const sensitive = isSensitiveKey(key);
+          const isNestedObject =
+            nestedValue !== null && typeof nestedValue === "object";
+
+          return (
+            <div
+              key={key}
+              className={cx(
+                "rounded-xl border p-3",
+                sensitive
+                  ? "border-brand/30 bg-brand/10 shadow-[0_0_0_1px_rgba(217,31,121,0.08)]"
+                  : "border-line bg-white/4",
+              )}
+            >
+              <p
+                className={cx(
+                  "mb-2 text-xs uppercase tracking-[0.08em]",
+                  sensitive ? "font-semibold text-brand-pale" : "text-ink-soft",
+                )}
+              >
+                {key}
+              </p>
+              {isNestedObject ? (
+                <SensitiveJsonView value={nestedValue} />
+              ) : (
+                <code
+                  className={cx(
+                    "block break-words font-mono",
+                    sensitive ? "text-base font-semibold text-white" : "text-ink",
+                  )}
+                >
+                  {typeof nestedValue === "string"
+                    ? nestedValue
+                    : JSON.stringify(nestedValue)}
+                </code>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <code className="block break-words font-mono text-ink">
+      {String(value)}
+    </code>
+  );
+}
+
+function isSensitiveKey(key: string) {
+  const normalized = key.toLowerCase();
+  return [
+    "cpf",
+    "cnpj",
+    "document",
+    "documento",
+    "email",
+    "mail",
+    "phone",
+    "telefone",
+    "celular",
+    "msisdn",
+    "user",
+    "userid",
+    "user_id",
+    "ticket",
+    "ticketid",
+    "ticket_id",
+    "externalid",
+    "account",
+    "customer",
+    "client",
+    "token",
+    "invitation",
+  ].some((needle) => normalized.includes(needle));
 }
 
 function createAppState(contract: InputContract, dryRun = true): AppState {
@@ -980,6 +1322,56 @@ function truncateText(value: string, maxLength: number): string {
   return value.length > maxLength
     ? `${value.slice(0, Math.max(0, maxLength - 3))}...`
     : value;
+}
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+function getStatusBadgeClass(status: TicketOutputStatus) {
+  switch (status) {
+    case "pending_review":
+      return "bg-amber-300 text-amber-950";
+    case "ready_to_resolve":
+      return "bg-emerald-400 text-emerald-950";
+    case "manual_followup_required":
+      return "bg-sky-400 text-sky-950";
+    case "failed":
+    case "rejected":
+      return "bg-rose-400 text-rose-950";
+    case "no_action_possible":
+      return "bg-zinc-300 text-zinc-950";
+  }
+}
+
+function getActionTypeClass(type: TicketAction["type"], selected: boolean) {
+  if (selected) {
+    return "bg-white/14 text-[#fff7fa]";
+  }
+
+  switch (type) {
+    case "http_request":
+      return "bg-brand/10 text-brand";
+    case "slack_query":
+      return "bg-brand-pale text-brand-dark";
+    case "manual_note":
+      return "bg-brand-pale/50 text-brand-dark";
+  }
+}
+
+function getMethodClass(method: string) {
+  switch (method.toUpperCase()) {
+    case "GET":
+      return "bg-brand-pale text-brand-dark";
+    case "DELETE":
+      return "bg-brand-pale/50 text-brand-dark";
+    default:
+      return "bg-brand/10 text-brand";
+  }
+}
+
+function ticketHasNoActions(ticket: InputTicket): boolean {
+  return (ticket.actions?.length ?? 0) === 0;
 }
 
 export default App;

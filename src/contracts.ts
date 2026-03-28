@@ -50,42 +50,6 @@ export interface ManualNoteAction {
   note: string;
 }
 
-export type TicketAction = HttpAction | SlackQueryAction | ManualNoteAction;
-
-export interface InputTicket {
-  ticketId: string;
-  title: string;
-  proposedResponse?: string;
-  noActionReason?: string;
-  actions?: TicketAction[];
-}
-
-export interface InputContract {
-  contractVersion: string;
-  generatedAt: string;
-  tickets: InputTicket[];
-}
-
-export interface ActionOutput {
-  actionId: string;
-  approvalStatus: Exclude<ApprovalStatus, "pending">;
-  executionStatus: Exclude<ExecutionStatus, "not_started">;
-}
-
-export interface OutputTicket {
-  ticketId: string;
-  status: TicketOutputStatus;
-  actions: ActionOutput[];
-  reason?: string;
-}
-
-export interface OutputContract {
-  contractVersion: string;
-  processedAt: string;
-  mode: "live" | "dry_run";
-  tickets: OutputTicket[];
-}
-
 export interface ActionRuntimeState {
   approvalStatus: ApprovalStatus;
   executionStatus: ExecutionStatus;
@@ -163,64 +127,4 @@ export function buildDerivedCurl(request: HttpRequestDefinition): string {
 
 function quoteShell(value: string): string {
   return `'${value.replaceAll("'", `'\"'\"'`)}'`;
-}
-
-export function ticketHasNoActions(ticket: InputTicket): boolean {
-  return (ticket.actions?.length ?? 0) === 0;
-}
-
-export function validateInputContract(raw: unknown): { ok: true; contract: InputContract } | { ok: false; error: string } {
-  if (!isRecord(raw)) {
-    return { ok: false, error: "O JSON precisa ser um objeto." };
-  }
-
-  if (typeof raw.contractVersion !== "string") {
-    return { ok: false, error: "contractVersion é obrigatório e deve ser string." };
-  }
-
-  if (typeof raw.generatedAt !== "string") {
-    return { ok: false, error: "generatedAt é obrigatório e deve ser string." };
-  }
-
-  if (!Array.isArray(raw.tickets)) {
-    return { ok: false, error: "tickets é obrigatório e deve ser uma lista." };
-  }
-
-  for (const [ticketIndex, ticket] of raw.tickets.entries()) {
-    if (!isRecord(ticket)) {
-      return { ok: false, error: `Ticket #${ticketIndex + 1} é inválido.` };
-    }
-
-    if (typeof ticket.ticketId !== "string" || typeof ticket.title !== "string") {
-      return { ok: false, error: `Ticket #${ticketIndex + 1} precisa ter ticketId e title.` };
-    }
-
-    if (ticket.actions !== undefined && !Array.isArray(ticket.actions)) {
-      return { ok: false, error: `Ticket ${ticket.ticketId}: actions deve ser uma lista.` };
-    }
-
-    if (ticket.actions) {
-      for (const [actionIndex, action] of ticket.actions.entries()) {
-        if (!isRecord(action) || typeof action.actionId !== "string" || typeof action.label !== "string" || typeof action.type !== "string") {
-          return { ok: false, error: `Ticket ${ticket.ticketId}: ação #${actionIndex + 1} é inválida.` };
-        }
-
-        if (action.type === "http_request") {
-          if (!isRecord(action.request) || typeof action.request.method !== "string" || typeof action.request.url !== "string") {
-            return { ok: false, error: `Ticket ${ticket.ticketId}: ação ${action.actionId} precisa de request estruturada.` };
-          }
-        }
-
-        if (action.type === "slack_query" && typeof action.queryText !== "string") {
-          return { ok: false, error: `Ticket ${ticket.ticketId}: ação ${action.actionId} precisa de queryText.` };
-        }
-
-        if (action.type === "manual_note" && typeof action.note !== "string") {
-          return { ok: false, error: `Ticket ${ticket.ticketId}: ação ${action.actionId} precisa de note.` };
-        }
-      }
-    }
-  }
-
-  return { ok: true, contract: raw as unknown as InputContract };
 }
